@@ -30,10 +30,7 @@ def construct_mass_matrix(N, h):
   M[0, 0] = M[N-1, N-1] = h/3
 
   val = h / 6
-  # Set off-diagonal entries
-  val = h / 6
-  for i in range(N-1):  # loop to N-1 so i+1 is valid
-      M[i, i+1] = val
-      M[i+1, i] = val   # assign symmetric entry
-
+  for i in range(N-1):
+    M[i, i+1] = val
+    M[i+1, i] = val
   return M
