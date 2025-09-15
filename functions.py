@@ -60,5 +60,5 @@ def analytical_m(m_L, alpha_L, lambd, x, t):
 def analytical_s(alpha_L, lambd, t):
   return 2*lambd*np.sqrt(alpha_L*t)
 
-def f_lambd(lambd, c_L, m_L, l):
+def lambdeq(lambd, c_L, m_L, l):
   return lambd * np.exp(lambd**2) * erf(lambd) - (m_L * c_L) / (l*np.sqrt(np.pi))

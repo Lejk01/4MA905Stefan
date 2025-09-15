@@ -1,33 +1,58 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from functions import (construct_mass_matrix, 
-                       construct_convection_matrix, 
+from functions import (construct_convection_matrix,
+                       construct_mass_matrix,
                        construct_stiffness_matrix,
-                       analytical_m,
-                       analytical_s
+                       analytical_m, 
+                       analytical_s,
+                       lambdeq
                        )
+from scipy.optimize import fsolve
 
-N_nodes = 100
-HORIZON = 10000 # [0, T] = [0, HORIZON]
-l = 2
-k_L = 0.5
-p_L = 0.5
-m_L = 10
-c_L = 0.5
-space = np.linspace(start=0, stop=1, num=10_000, endpoint=True)
-time = np.linspace(start=0, stop=HORIZON, num=10_000, endpoint=True)
-h = 0.1
-alpha_L = k_L / (p_L * c_L)
-lambd = 0.5
-nodes = np.arange(0, N_nodes, step=h)
+# Water–ice constants.
+k_L = 0.6         # W/(mK)
+rho_L = 1000      # kg/m^3
+c_L = 4200        # J/(kgK)
+m_L = 334e3       # J/kg
+alpha_L = k_L / (rho_L * c_L)  # m^2/s
+l = 10            # temperature difference driving phase change [K]
 
-s = np.array([analytical_s(alpha_L, lambd, t) for t in time])
+lambda_guess = 0.5 # Shit guess probably?
 
+lambd = fsolve(lambdeq, lambda_guess, args=(c_L, m_L, l))[0]
+
+# Time horizon (seconds).
+HORIZON = 600     # 10 minutes
+time = np.linspace(1e-6, HORIZON, 300)  # 300 time steps
+
+space = np.linspace(0, 0.05, 300) 
+
+s = analytical_s(alpha_L, lambd, time)
+
+T, X = np.meshgrid(time, space, indexing="ij")
+S = analytical_s(alpha_L, lambd, T)
+M = analytical_m(m_L, alpha_L, lambd, X, T)
+
+M[X > S] = np.nan
+
+# Plot interface s(t)
 sns.set_theme(style="whitegrid")
 plt.figure(figsize=(8, 4))
 sns.lineplot(x=time, y=s)
-plt.xlabel("Time")
-plt.ylabel("s(t)")
-plt.title("Interface position in x dimension")
+plt.xlabel("Time [s]")
+plt.ylabel("Interface position s(t) [m]")
+plt.title("Stefan problem (water–ice): interface evolution")
+plt.show()
+
+# Plot heat distribution
+plt.figure(figsize=(10, 6))
+
+# Swap axes: X=time, Y=space, transpose M
+pcm = plt.pcolormesh(time, space, M.T, shading="auto", cmap="magma")
+
+plt.colorbar(pcm, label="m(x,t) [J/kg]")
+plt.xlabel("Time t [s]")
+plt.ylabel("Space x [m]")
+plt.title("Heat distribution m(x,t) (time on x-axis)")
 plt.show()
