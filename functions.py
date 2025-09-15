@@ -34,3 +34,17 @@ def construct_mass_matrix(N, h):
     M[i, i+1] = val
     M[i+1, i] = val
   return M
+
+def construct_stiffness_matrix(N, h):
+  A = np.zeros((N, N))
+  np.fill_diagonal(A, 2 / h)
+  A[0, 0] = A[N-1, N-1] = h
+
+  val = - 1 / h
+  for i in range(N-1):
+    A[i, i+1] = val
+    A[i+1, i] = val
+  return A
+
+def construct_convection_matrix():
+  pass
