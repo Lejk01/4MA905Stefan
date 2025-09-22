@@ -2,12 +2,9 @@ import numpy as np
 from scipy.special import erf
 
 def phi_j(j, h, x, nodes):
-  x_lb = nodes[j-1]
   x_j = nodes[j]
-  if j+1 < len(nodes): # Nåt fel här.
-    x_ub = nodes[j+1]
-  else:
-    return 1
+  x_lb = nodes[j-1] if j-1 >= 0 else x_j
+  x_ub = nodes[j+1] if j+1 < len(nodes) else x_j
 
   if x >= x_lb  and x <= x_j:
     return (x - x_lb) / h
@@ -15,7 +12,7 @@ def phi_j(j, h, x, nodes):
     return (x_ub - x) / h
   else:
     return 0
-  
+
 def phi_j_vectorized(j, h, x, nodes):
   x_lb = nodes[j - 1] if j - 1 >= 0 else nodes[j]
   x_j = nodes[j]
@@ -32,9 +29,9 @@ def phi_j_vectorized(j, h, x, nodes):
   return res
 
 def phi_j_dt(j, h, x, nodes):
-  x_lb = nodes[j-1]
   x_j = nodes[j]
-  x_ub = nodes[j+1]
+  x_lb = nodes[j - 1] if j - 1 >= 0 else x_j
+  x_ub = nodes[j + 1] if j + 1 < len(nodes) else x_j
   
   if x >= x_lb  and x <= x_j:
     return 1 / h
