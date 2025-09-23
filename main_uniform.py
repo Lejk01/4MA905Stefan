@@ -159,7 +159,7 @@ order_of_convergence_s = mse_h2 / mse_h # h2 has larger distance between nodes t
 
 plt.figure(figsize=(8,4))
 plt.plot(time, s_h, label="s (FEM, numeric, grid h)", linestyle="--")
-plt.plot(time, s_h2, label="s (FEM, numeric, grid h/2)", linestyle="--")
+plt.plot(time, s_h2, label="s (FEM, numeric, grid 2*h)", linestyle="--")
 plt.plot(time, s_analytic, label="s (analytical)")
 
 # Annotate MSE at the end of the curve
@@ -186,42 +186,45 @@ plt.show()
 m_xt_h = np.full((len(time), len(space)), np.nan)
 m_xt_h2 = np.full((len(time), len(space)), np.nan)
 
+T, X = np.meshgrid(time, space, indexing='ij')
+S = analytical_s(alpha_L, lambd, T)
+M = analytical_m(m_L, alpha_L, lambd, X, T)
+M[X > S] = np.nan
+
+Mh  = np.full_like(M, np.nan)
+Mh2 = np.full_like(M, np.nan)
+
 for t in range(len(time)):
-  xi_vals_h = space / s_h[t]
-  interp_h = np.interp(xi_vals_h, nodes_h, F_h[t, :])
-  m_xt_h[t, :] = np.where(xi_vals_h <= 1.0, interp_h, np.nan)
+  Mh[t, space <= s_h[t]] = analytical_m(m_L, alpha_L, lambd, space[space <= s_h[t]], time[t])
+  Mh2[t, space <= s_h2[t]] = analytical_m(m_L, alpha_L, lambd, space[space <= s_h2[t]], time[t])
+    
+  xi_h  = space / s_h[t]
+  xi_h2 = space / s_h2[t]
 
-  xi_vals_h2 = space / s_h2[t]
-  interp_h2 = np.interp(xi_vals_h2, nodes_h2, F_h2[t, :])
-  m_xt_h2[t, :] = np.where(xi_vals_h2 <= 1.0, interp_h2, np.nan)
+  interp_h  = interp1d(nodes_h,  F_h[t, :],  kind='linear', bounds_error=False, fill_value=np.nan)
+  interp_h2 = interp1d(nodes_h2, F_h2[t, :], kind='linear', bounds_error=False, fill_value=np.nan)
 
-# Analytical solutions
-Th, Xh = np.meshgrid(time, xi_vals_h, indexing="ij")
-Sh = analytical_s(alpha_L, lambd, Th)
-Mh = analytical_m(m_L, alpha_L, lambd, Xh, Th)
-Mh[Xh > Sh] = np.nan
+  # evaluate at the xi coordinates
+  vals_h  = interp_h(xi_h)
+  vals_h2 = interp_h2(xi_h2)
 
-Th2, Xh2 = np.meshgrid(time, xi_vals_h, indexing="ij")
-Mh2 = analytical_m(m_L, alpha_L, lambd, Xh2, Th2)
-Mh2[Xh2 > Sh] = np.nan
+  # assign only where xi <= 1 (physical domain of that FEM)
+  mask1 = (xi_h  <= 1.0)
+  mask2 = (xi_h2 <= 1.0)
+
+  m_xt_h[t,  mask1] = vals_h[mask1]
+  m_xt_h2[t, mask2] = vals_h2[mask2]
 
 Mh_flat = Mh.flatten()
 Mh2_flat = Mh2.flatten()
 m_xt_h_flat = m_xt_h.flatten()
 m_xt_h2_flat = m_xt_h2.flatten()
 
-print("Before drop, ", len(Mh_flat))
-maskh = ~np.isnan(Mh_flat) & ~np.isnan(m_xt_h_flat) 
-maskh2 = ~np.isnan(Mh2_flat) & ~np.isnan(m_xt_h2_flat) 
+maskh = ~(np.isnan(Mh_flat) | np.isnan(m_xt_h_flat))
+maskh2 = ~(np.isnan(Mh2_flat) | np.isnan(m_xt_h2_flat))
 
-Mh_flat = Mh_flat[maskh]
-Mh2_flat = Mh2_flat[maskh2]
-m_xt_h_flat = m_xt_h_flat[maskh]
-m_xt_h2_flat = m_xt_h2_flat[maskh2]
-
-print("After drop, ", len(Mh_flat))
-mse_h = mean_squared_error(Mh_flat, m_xt_h_flat)
-mse_h2 = mean_squared_error(Mh2_flat, m_xt_h2_flat)
+mse_h  = mean_squared_error(Mh_flat[maskh], m_xt_h_flat[maskh])
+mse_h2 = mean_squared_error(Mh2_flat[maskh2], m_xt_h2_flat[maskh2])
 
 order_of_convergence_m = mse_h2 / mse_h
 
@@ -233,15 +236,15 @@ plt.ylabel("x [m]")
 plt.title("F(x,t) - FEM solution (grid h)")
 plt.colorbar(pcm, label="F")
 
-plt.text(time[-1], space[-50],
+plt.text(time[-10], space[-50],
          f"MSE for h = {mse_h:.3e}",
          fontsize=10, va="bottom", ha="right", color="red")
 
-plt.text(time[-1], space[-1],
-         f"MSE for h/2 = {mse_h2:.3e}",
+plt.text(time[-10], space[-90],
+         f"MSE for 2*h = {mse_h2:.3e}",
          fontsize=10, va="bottom", ha="right", color="red")
 
-plt.text(time[-1], space[-90],
+plt.text(time[-10], space[-130],
          f"Order of convergence = {order_of_convergence_m:.3e}",
          fontsize=10, va="bottom", ha="right", color="red")
 
