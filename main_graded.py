@@ -10,6 +10,7 @@ from functions import (construct_convection_matrix,
                        phi_j_dt
                        )
 from scipy.optimize import fsolve
+from sklearn.metrics import mean_squared_error
 
 # Water–ice constants.
 k_L = 0.5664         # W/(mK)
@@ -28,20 +29,23 @@ h_nodes = nodes[1] - nodes[0]
 
 # Time horizon (seconds).
 HORIZON = 600     # 5 minutes
-time = np.linspace(1e-6, HORIZON, 2000)
+TIME_POINTS = 1000
+time = np.linspace(1e-6, HORIZON, TIME_POINTS)
 dt = time[1] - time[0]
 
 # Graded mesh
-# time = [ ... for t in range(600)]
+time_graded =  time * np.linspace(0, 1, TIME_POINTS)
+time_graded[0] = time_graded[1] / 2
+dt_graded = np.diff(time_graded)
 
-space = np.linspace(0, L, 1000) 
+space = np.linspace(0, L, 1000)
 h_space = space[1] - space[0]
 
 ### Analytical solution - Start ###
-s_analytic = analytical_s(alpha_L, lambd, time)
+s_analytic = analytical_s(alpha_L, lambd, time_graded)
 s_analytic[0] = h_nodes
 
-T, X = np.meshgrid(time, space, indexing="ij")
+T, X = np.meshgrid(time_graded, space, indexing="ij")
 S = analytical_s(alpha_L, lambd, T)
 M = analytical_m(m_L, alpha_L, lambd, X, T)
 
@@ -95,15 +99,14 @@ for n in range(len(time)-1):
   dsdt = -(k_L/(rho_L*l)) * (1/s[n]) * dFdxi
 
   # Update s(t).
-  s_next = s[n] + dt * dsdt
+  s_next = s[n] + dt_graded[n] * dsdt
   s[n+1] = s_next
 
   # Finding the coefficients.
-  LHS = mass_int + dt * (alpha_L / s_next**2) * stiffness_int - dt * (dsdt/s_next) * convection_int
-  RHS = np.dot(mass_int, a_v) + dt * (dsdt/s_next) * load_vector
+  LHS = mass_int + dt_graded[n] * (alpha_L / s_next**2) * stiffness_int - dt_graded[n] * (dsdt/s_next) * convection_int
+  RHS = np.dot(mass_int, a_v) + dt_graded[n] * (dsdt/s_next) * load_vector
 
   a_v = np.linalg.solve(LHS, RHS)
-
 
   # Apply u everywhere then overwrite interior nodes with our approximation.
   F[n+1, :] = u_vals.copy()
@@ -112,19 +115,32 @@ for n in range(len(time)-1):
 ## ADD MSE both m and s.
 
 # Plots.
-sns.set_theme(style="whitegrid")
-plt.figure(figsize=(8,4))
-plt.plot(time, s, label="s (FEM, numeric)", linestyle="--")
-plt.plot(time, s_analytic, label="s (analytical)")
-plt.xlabel("Time [s]")
-plt.ylabel("Interface s(t) [units of xi]")
-plt.legend()
-plt.title("Interface evolution (xi-domain FEM using your matrices)")
 
-plt.figure(figsize=(10,6))
-pcm = plt.pcolormesh(time, nodes, F.T, shading='auto')
+# Compute MSE
+mse = mean_squared_error(s_analytic, s)
+
+plt.figure(figsize=(8,4))
+plt.plot(time_graded, s, label="s (FEM, numeric)", linestyle="--")
+plt.plot(time_graded, s_analytic, label="s (analytical)")
+
+# Annotate MSE at the end of the curve
+plt.text(time_graded[-1], s[-1],
+         f"MSE = {mse:.3e}",
+         fontsize=10, va="bottom", ha="right", color="red")
+
 plt.xlabel("Time [s]")
-plt.ylabel("xi")
+plt.ylabel("Interface s(t) [units of ξ]")
+plt.legend()
+plt.title("Interface evolution (ξ-domain FEM)")
+plt.tight_layout()
+plt.show()
+
+# Second plot unchanged
+plt.figure(figsize=(10,6))
+pcm = plt.pcolormesh(time_graded, nodes, F.T, shading='auto')
+plt.xlabel("Time [s]")
+plt.ylabel("ξ")
 plt.title("F(ξ,t) - FEM solution")
 plt.colorbar(pcm, label="F")
+plt.tight_layout()
 plt.show()
