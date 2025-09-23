@@ -78,8 +78,8 @@ def construct_convection_matrix(N, h, nodes):
 def analytical_m(m_L, alpha_L, lambd, x, t):
   return m_L * (1 - erf(x / (2*np.sqrt(alpha_L*t))) / erf(lambd) )
 
-def analytical_s(alpha_L, lambd, t):
-  return 2*lambd*np.sqrt(alpha_L*t)
+def analytical_s(alpha_L, lambd, t, s0):
+  return np.sqrt(s0**2 + 4*alpha_L*lambd**2*t)
 
 def lambdeq(lambd, c_L, m_L, l):
   return lambd * np.exp(lambd**2) * erf(lambd) - (m_L * c_L) / (l*np.sqrt(np.pi))

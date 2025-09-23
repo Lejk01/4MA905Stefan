@@ -43,7 +43,7 @@ space = np.linspace(0, L, 1000)
 h_space = space[1] - space[0]
 
 ### Analytical solution - Start ###
-s_analytic = analytical_s(alpha_L, lambd, time)
+s_analytic = analytical_s(alpha_L, lambd, time, h_nodes)
 s_analytic[0] = h_nodes
 
 ### Analytical solution - End ###
@@ -102,7 +102,7 @@ s_h = np.zeros(len(time))
 s_h[0] = h_nodes
 
 s_h2 = np.zeros(len(time))
-s_h2[0] = h2_nodes
+s_h2[0] = h_nodes
 
 # Solve for each time point:
 for n in range(len(time)-1):
@@ -187,7 +187,7 @@ m_xt_h = np.full((len(time), len(space)), np.nan)
 m_xt_h2 = np.full((len(time), len(space)), np.nan)
 
 T, X = np.meshgrid(time, space, indexing='ij')
-S = analytical_s(alpha_L, lambd, T)
+S = analytical_s(alpha_L, lambd, T, s0=h_nodes)
 M = analytical_m(m_L, alpha_L, lambd, X, T)
 M[X > S] = np.nan
 
