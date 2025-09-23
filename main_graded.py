@@ -31,18 +31,13 @@ h_nodes = nodes[1] - nodes[0]
 HORIZON = 600     # 5 minutes
 TIME_POINTS = 1000
 time = np.linspace(1e-6, HORIZON, TIME_POINTS)
-dt = time[1] - time[0]
 
-<<<<<<<< HEAD:main_graded.py
 # Graded mesh
 time_graded =  time * np.linspace(0, 1, TIME_POINTS)
 time_graded[0] = time_graded[1] / 2
 dt_graded = np.diff(time_graded)
 
 space = np.linspace(0, L, 1000)
-========
-space = np.linspace(0, L, 1000) 
->>>>>>>> 71d9e98c391b763c426e65bd80b4e99a3e040099:main_uniform.py
 h_space = space[1] - space[0]
 
 ### Analytical solution - Start ###
