@@ -211,12 +211,13 @@ m_xt_h_flat = m_xt_h.flatten()
 m_xt_h2_flat = m_xt_h2.flatten()
 
 print("Before drop, ", len(Mh_flat))
-mask = ~np.isnan(Mh_flat) & ~np.isnan(m_xt_h_flat) & ~np.isnan(m_xt_h2_flat)
+maskh = ~np.isnan(Mh_flat) & ~np.isnan(m_xt_h_flat) 
+maskh2 = ~np.isnan(Mh2_flat) & ~np.isnan(m_xt_h2_flat) 
 
-Mh_flat = Mh_flat[mask]
-Mh2_flat = Mh2_flat[mask]
-m_xt_h_flat = m_xt_h_flat[mask]
-m_xt_h2_flat = m_xt_h2_flat[mask]
+Mh_flat = Mh_flat[maskh]
+Mh2_flat = Mh2_flat[maskh2]
+m_xt_h_flat = m_xt_h_flat[maskh]
+m_xt_h2_flat = m_xt_h2_flat[maskh2]
 
 print("After drop, ", len(Mh_flat))
 mse_h = mean_squared_error(Mh_flat, m_xt_h_flat)
