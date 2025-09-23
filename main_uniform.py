@@ -31,9 +31,6 @@ HORIZON = 600     # 5 minutes
 time = np.linspace(1e-6, HORIZON, 2000)
 dt = time[1] - time[0]
 
-# Graded mesh
-# time = [ ... for t in range(600)]
-
 space = np.linspace(0, L, 1000) 
 h_space = space[1] - space[0]
 
