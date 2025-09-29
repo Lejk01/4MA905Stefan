@@ -44,7 +44,6 @@ h_space = space[1] - space[0]
 
 ### Analytical solution - Start ###
 s_analytic = analytical_s(alpha_L, lambd, time, h_nodes)
-s_analytic[0] = h_nodes
 
 ### Analytical solution - End ###
 
@@ -87,7 +86,6 @@ load_vector_h2 = -m_L * h2_nodes * nodes_h2[interior_idx_h2]
 a_vh = - u_int_h.copy()
 a_vh2 = - u_int_h2.copy()
 
-
 ## F on the nodes, F = u + v
 F_h = np.zeros((len(time), N_nodes_h))
 F_h[0, :] = u_vals_h.copy()
@@ -99,10 +97,10 @@ F_h2[0, 1:-1] += a_vh2
 
 ## interface s(t).
 s_h = np.zeros(len(time))
-s_h[0] = h_nodes
+s_h[0] = s_analytic[0]
 
 s_h2 = np.zeros(len(time))
-s_h2[0] = h_nodes
+s_h2[0] = s_analytic[0]
 
 # Solve for each time point:
 for n in range(len(time)-1):
@@ -136,7 +134,6 @@ for n in range(len(time)-1):
   # Finding the coefficients.
   LHSh = mass_int_h + dt * (alpha_L / s_next_h**2) * stiffness_int_h - dt * (dshdt/s_next_h) * convection_int_h
   RHSh = np.dot(mass_int_h, a_vh) + dt * (dshdt/s_next_h) * load_vector_h
-  a_vh = np.linalg.solve(LHSh, RHSh)
 
   LHSh2 = mass_int_h2 + dt * (alpha_L / s_next_h2**2) * stiffness_int_h2 - dt * (dsh2dt/s_next_h2) * convection_int_h2
   RHSh2 = np.dot(mass_int_h2, a_vh2) + dt * (dsh2dt/s_next_h2) * load_vector_h2
