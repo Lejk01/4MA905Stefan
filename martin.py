@@ -35,7 +35,7 @@ lambd = fsolve(lambdeq, lambda_guess, args=(c_L, m_L, l))[0]
 
 # Time horizon (seconds).
 HORIZON = 1     # 5 minutes
-TIME_POINTS = 1000
+TIME_POINTS = 4000
 time = np.linspace(1e-6, HORIZON, TIME_POINTS)
 dt = time[1] - time[0]
 
@@ -43,7 +43,12 @@ dt = time[1] - time[0]
 s_analytic = analytical_s(alpha_L, lambd, time, 0.02)
 
 plt.figure(figsize=(8,4))
-N_nodes_list = [51, 151, 251]
+N_nodes_list = [25, 51]
+
+# For convergence calculations
+h_list = []
+mse_s_list = []
+mse_F_list = []
 
 for N_nodes in N_nodes_list:
   nodes = np.linspace(0, 1, N_nodes)
@@ -115,6 +120,9 @@ for N_nodes in N_nodes_list:
 
   plt.plot(time, s, label=f"s (FEM, numeric, nodes={N_nodes})", linestyle="--")
 
+  h_list.append(h_nodes)
+  mse_s_list.append(mse_s)
+
 plt.plot(time, s_analytic, label="s (analytical)")
 plt.xlabel("Time [s]")
 plt.ylabel("Interface s(t) [units of ξ]")
@@ -122,6 +130,10 @@ plt.legend()
 plt.title("Interface evolution (ξ-domain FEM)")
 plt.tight_layout()
 plt.show()
+
+# e(h) ~ C*h^p --- p = log(e(h1)/e(h2)) / log(h1/h2)
+p = np.log(mse_s_list[0]/mse_s_list[1])/np.log(h_list[0]/h_list[1])
+print(f'Order of convergence: {p:.4}')
 
 # FEM in physical domain.
 space = np.linspace(0, L, 1000)
