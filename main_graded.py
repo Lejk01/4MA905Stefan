@@ -20,13 +20,21 @@ from sklearn.metrics import mean_squared_error
 k_L = 0.5664         # W/(mK)
 rho_L = 1000         # kg/m^3
 c_L = 4189.9         # J/(kgK)
-m_L = 298.15
+m_L = 323.15 * 5 # 150 C
 alpha_L = k_L / (rho_L * c_L)  # m^2/s
 l = 334e3             # latent heat [J/kg]
 L = 0.1               # physical domain length [m]
 
+
+#k_L = 1         # W/(mK)
+#rho_L = 1         # kg/m^3
+#c_L = 1         # J/(kgK)
+#m_L = 1
+#alpha_L = 1
+#l = 1
+
 # Spatial discretizations (same as your uniform-file)
-N_nodes_h = 750
+N_nodes_h = 75
 N_nodes_h2 = int(N_nodes_h/2)
 
 nodes_h = np.linspace(0, 1, N_nodes_h)
@@ -36,8 +44,8 @@ nodes_h2 = np.linspace(0, 1, N_nodes_h2)
 h2_nodes = nodes_h2[1] - nodes_h2[0]
 
 # Time horizon + points
-HORIZON = 600.0     # seconds
-TIME_POINTS = 1000
+HORIZON = 600.0
+TIME_POINTS = 4000
 
 # Solver helper (Stefan parameter lambda)
 lambda_guess = 0.5

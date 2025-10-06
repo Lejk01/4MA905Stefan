@@ -1,249 +1,189 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
 from functions import (construct_convection_matrix,
-                       construct_mass_matrix,
-                       construct_stiffness_matrix,
-                       analytical_m, 
-                       analytical_s,
-                       lambdeq,
-                       phi_j_dt
-                       )
+                      construct_mass_matrix,
+                      construct_stiffness_matrix,
+                      analytical_m, 
+                      analytical_s,
+                      lambdeq,
+                      phi_j_dt
+                      )
 from scipy.optimize import fsolve
 from scipy.interpolate import interp1d
 from sklearn.metrics import mean_squared_error
 
-# Water–ice constants.
-k_L = 0.5664         # W/(mK)
-rho_L = 1000         # kg/m^3
-c_L = 4189.9         # J/(kgK)
-m_L = 298.15
-alpha_L = k_L / (rho_L * c_L)  # m^2/s
-l = 334e3             # temperature difference driving phase change [K]
-N_nodes_h = 750
-N_nodes_h2 = int(N_nodes_h/2)
-L = 0.1
-lambda_guess = 0.5
-
-lambd = fsolve(lambdeq, lambda_guess, args=(c_L, m_L, l))[0]
-
-nodes_h = np.linspace(0, 1, N_nodes_h)
-h_nodes = nodes_h[1] - nodes_h[0]
-
-nodes_h2 = np.linspace(0, 1, N_nodes_h2)
-h2_nodes = nodes_h2[1] - nodes_h2[0]
-
-# Time horizon (seconds).
-HORIZON = 600     # 5 minutes
-TIME_POINTS = 1000
-time = np.linspace(1e-6, HORIZON, TIME_POINTS)
-dt = time[1] - time[0]
-
-space = np.linspace(0, L, 1000)
-h_space = space[1] - space[0]
-
-### Analytical solution - Start ###
-s_analytic = analytical_s(alpha_L, lambd, time, h_nodes)
-
-### Analytical solution - End ###
-
-## Finite element method Uniform mesh - Start ##
-
-# Finest granulariy -> h
-mass_matrix_h = construct_mass_matrix(N_nodes_h, h_nodes)
-stiffness_matrix_h = construct_stiffness_matrix(N_nodes_h, h_nodes)
-convection_matrix_h = construct_convection_matrix(N_nodes_h, h_nodes, nodes_h)
-
-# h/2
-mass_matrix_h2 = construct_mass_matrix(N_nodes_h2, h2_nodes)
-stiffness_matrix_h2 = construct_stiffness_matrix(N_nodes_h2, h2_nodes)
-convection_matrix_h2 = construct_convection_matrix(N_nodes_h2, h2_nodes, nodes_h2)
-
-## Interior matrices (no boundaries) (h) ##
-interior_idx_h = np.arange(1, N_nodes_h-1)
-mass_int_h = mass_matrix_h[np.ix_(interior_idx_h, interior_idx_h)]
-stiffness_int_h = stiffness_matrix_h[np.ix_(interior_idx_h, interior_idx_h)]
-convection_int_h = convection_matrix_h[np.ix_(interior_idx_h, interior_idx_h)]
-
-## Interior matrices (no boundaries) (h/2) ##
-interior_idx_h2 = np.arange(1, N_nodes_h2-1)
-mass_int_h2 = mass_matrix_h2[np.ix_(interior_idx_h2, interior_idx_h2)]
-stiffness_int_h2 = stiffness_matrix_h2[np.ix_(interior_idx_h2, interior_idx_h2)]
-convection_int_h2 = convection_matrix_h2[np.ix_(interior_idx_h2, interior_idx_h2)]
-
-## u(0) = m_L, u(1) = 0, in between does not matter. 
-u_vals_h = m_L * (1.0 - nodes_h)
-u_int_h = u_vals_h[interior_idx_h]
-
-u_vals_h2 = m_L * (1.0 - nodes_h2)
-u_int_h2 = u_vals_h2[interior_idx_h2]
-
-# load vector / forcing function.
-load_vector_h = -m_L * h_nodes * nodes_h[interior_idx_h]
-load_vector_h2 = -m_L * h2_nodes * nodes_h2[interior_idx_h2]
-
-## F(xi, 0) = 0 -> v(xi, 0) = -u
-a_vh = - u_int_h.copy()
-a_vh2 = - u_int_h2.copy()
-
-## F on the nodes, F = u + v
-F_h = np.zeros((len(time), N_nodes_h))
-F_h[0, :] = u_vals_h.copy()
-F_h[0, 1:-1] += a_vh
-
-F_h2 = np.zeros((len(time), N_nodes_h2))
-F_h2[0, :] = u_vals_h2.copy()
-F_h2[0, 1:-1] += a_vh2
-
-## interface s(t).
-s_h = np.zeros(len(time))
-s_h[0] = s_analytic[0]
-
-s_h2 = np.zeros(len(time))
-s_h2[0] = s_analytic[0]
-
-# Solve for each time point:
-for n in range(len(time)-1):
-  # temp F at time n.
-  F_nh = u_vals_h.copy()
-  F_nh[1:-1] += a_vh
-
-  F_nh2 = u_vals_h2.copy()
-  F_nh2[1:-1] += a_vh2
-
-  # dF/dxi at 1, for Stefan condition.
-  dFhdxi = 0
-  for j in range(N_nodes_h):
-    dFhdxi += F_nh[j] * phi_j_dt(j, h_nodes, 1, nodes_h)
+# ============================================================
+# Solver function
+# ============================================================
+def run_solver(N_nodes, L, HORIZON, alpha_L, k_L, rho_L, l, m_L, lambd, CFL_const=0.25):
+  # Mesh
+  nodes = np.linspace(0, 1, N_nodes)
+  h = nodes[1] - nodes[0]
   
-  dFh2dxi = 0
-  for j in range(N_nodes_h2):
-    dFh2dxi += F_nh2[j] * phi_j_dt(j, h2_nodes, 1, nodes_h2)
+  # Stable time step scaling with h^2
+  dt = CFL_const * h**2 / alpha_L
+  time = np.arange(1e-6, HORIZON, dt)
+  print(f"Running solver with N={N_nodes}, h={h:.3e}, dt={dt:.3e}, Nt={len(time)}")
+  
+  # Analytical solution for interface
+  s_analytic = analytical_s(alpha_L, lambd, time, h)
+  
+  # Matrices
+  M = construct_mass_matrix(N_nodes, h)
+  K = construct_stiffness_matrix(N_nodes, h)
+  C = construct_convection_matrix(N_nodes, h, nodes)
 
-  # Stefan condition.
-  dshdt = -(k_L/(rho_L*l)) * (1/s_h[n]) * dFhdxi
-  dsh2dt = -(k_L/(rho_L*l)) * (1/s_h2[n]) * dFh2dxi
+  # Interior
+  interior_idx = np.arange(1, N_nodes-1)
+  M_int = M[np.ix_(interior_idx, interior_idx)]
+  K_int = K[np.ix_(interior_idx, interior_idx)]
+  C_int = C[np.ix_(interior_idx, interior_idx)]
 
-  # Update s(t).
-  s_next_h = s_h[n] + dt * dshdt
-  s_h[n+1] = s_next_h
+  # Initial conditions
+  u_vals = m_L * (1.0 - nodes)
+  u_int  = u_vals[interior_idx]
 
-  s_next_h2 = s_h2[n] + dt * dsh2dt
-  s_h2[n+1] = s_next_h2
+  load_vector = -m_L * h * nodes[interior_idx]
+  a_v = - u_int.copy()
 
-  # Finding the coefficients.
-  LHSh = mass_int_h + dt * (alpha_L / s_next_h**2) * stiffness_int_h - dt * (dshdt/s_next_h) * convection_int_h
-  RHSh = np.dot(mass_int_h, a_vh) + dt * (dshdt/s_next_h) * load_vector_h
+  F = np.zeros((len(time), N_nodes))
+  F[0, :] = u_vals.copy()
+  F[0, 1:-1] += a_v
 
-  LHSh2 = mass_int_h2 + dt * (alpha_L / s_next_h2**2) * stiffness_int_h2 - dt * (dsh2dt/s_next_h2) * convection_int_h2
-  RHSh2 = np.dot(mass_int_h2, a_vh2) + dt * (dsh2dt/s_next_h2) * load_vector_h2
+  s_vals = np.zeros(len(time))
+  s_vals[0] = s_analytic[0]
 
-  a_vh = np.linalg.solve(LHSh, RHSh)
-  a_vh2 = np.linalg.solve(LHSh2, RHSh2)
+  # Time stepping
+  for n in range(len(time)-1):
+      # Current field
+      F_n = u_vals.copy()
+      F_n[1:-1] += a_v
 
-  # Apply u everywhere then overwrite interior nodes with our approximation.
-  F_h[n+1, :] = u_vals_h.copy()
-  F_h[n+1, 1:-1] += a_vh
+      # dF/dxi at xi=1
+      dFdxi = 0
+      for j in range(N_nodes):
+          dFdxi += F_n[j] * phi_j_dt(j, h, 1, nodes)
 
-  F_h2[n+1, :] = u_vals_h2.copy()
-  F_h2[n+1, 1:-1] += a_vh2
+      # Stefan condition
+      dshdt = -(k_L/(rho_L*l)) * (1/s_vals[n]) * dFdxi
+      s_next = s_vals[n] + dt * dshdt
+      s_vals[n+1] = s_next
 
-# Compute MSE
-mse_h = mean_squared_error(s_analytic, s_h)
-mse_h2 = mean_squared_error(s_analytic, s_h2)
+      # Solve system
+      LHS = M_int + dt * (alpha_L / s_next**2) * K_int - dt * (dshdt/s_next) * C_int
+      RHS = np.dot(M_int, a_v) + dt * (dshdt/s_next) * load_vector
+      a_v = np.linalg.solve(LHS, RHS)
 
-order_of_convergence_s = mse_h2 / mse_h # h2 has larger distance between nodes than h since fewer points. 
+      # Update field
+      F[n+1, :] = u_vals.copy()
+      F[n+1, 1:-1] += a_v
 
-plt.figure(figsize=(8,4))
-plt.plot(time, s_h, label="s (FEM, numeric, grid h)", linestyle="--")
-plt.plot(time, s_h2, label="s (FEM, numeric, grid 2*h)", linestyle="--")
-plt.plot(time, s_analytic, label="s (analytical)")
+  return time, s_vals, s_analytic, nodes, F
 
-# Annotate MSE at the end of the curve
-plt.text(time[-1], s_h[91],
-         f"MSE for h = {mse_h:.3e}",
-         fontsize=10, va="bottom", ha="right", color="red")
 
-plt.text(time[-1], s_h[50],
-         f"MSE for 2*h = {mse_h2:.3e}",
-         fontsize=10, va="bottom", ha="right", color="red")
+# ============================================================
+# Main script
+# ============================================================
+if __name__ == "__main__":
+  # Physical constants (nondimensionalised for simplicity)
+  k_L = 1.0
+  rho_L = 1.0
+  c_L = 1.0
+  m_L = 1.0
+  alpha_L = k_L / (rho_L * c_L)
+  l = 1.0
+  L = 1.0
+  HORIZON = 1.0
+  
+  lambda_guess = 0.5
+  lambd = fsolve(lambdeq, lambda_guess, args=(c_L, m_L, l))[0]
 
-plt.text(time[-1], s_h[1],
-         f"Order of convergence = {order_of_convergence_s:.3e}",
-         fontsize=10, va="bottom", ha="right", color="red")
+  # Grids
+  N_nodes_h  = 49
+  N_nodes_h2 = N_nodes_h // 2   # coarser grid (2h)
 
-plt.xlabel("Time [s]")
-plt.ylabel("Interface s(t) [units of ξ]")
-plt.legend()
-plt.title("Interface evolution (ξ-domain FEM)")
-plt.tight_layout()
-plt.show()
+  # Run solvers
+  time_h,  s_h,  s_analytic_h,  nodes_h,  F_h  = run_solver(N_nodes_h,  L, HORIZON, alpha_L, k_L, rho_L, l, m_L, lambd)
+  time_h2, s_h2, s_analytic_h2, nodes_h2, F_h2 = run_solver(N_nodes_h2, L, HORIZON, alpha_L, k_L, rho_L, l, m_L, lambd)
 
-# FEM in physical domain.
-m_xt_h = np.full((len(time), len(space)), np.nan)
-m_xt_h2 = np.full((len(time), len(space)), np.nan)
+  h = nodes_h[1] - nodes_h[0]
+  h2 = nodes_h2[1] - nodes_h2[0]
 
-T, X = np.meshgrid(time, space, indexing='ij')
-S = analytical_s(alpha_L, lambd, T, s0=h_nodes)
-M = analytical_m(m_L, alpha_L, lambd, X, T)
-M[X > S] = np.nan
+  # --------------------------------------------------------
+  # Compare s(t)
+  # --------------------------------------------------------
+  # Interpolate coarse solution to fine time grid for fair comparison
+  from scipy.interpolate import interp1d
+  interp_s_h2 = interp1d(time_h2, s_h2, bounds_error=False, fill_value="extrapolate")
+  s_h2_interp = interp_s_h2(time_h)
 
-Mh  = np.full_like(M, np.nan)
-Mh2 = np.full_like(M, np.nan)
+  mse_h  = mean_squared_error(s_analytic_h, s_h)
+  mse_h2 = mean_squared_error(s_analytic_h, s_h2_interp)
+  order_of_convergence_s = np.log(mse_h/mse_h2)/np.log(h/h2)
 
-for t in range(len(time)):
-  Mh[t, space <= s_h[t]] = analytical_m(m_L, alpha_L, lambd, space[space <= s_h[t]], time[t])
-  Mh2[t, space <= s_h2[t]] = analytical_m(m_L, alpha_L, lambd, space[space <= s_h2[t]], time[t])
-    
-  xi_h  = space / s_h[t]
-  xi_h2 = space / s_h2[t]
 
-  interp_h  = interp1d(nodes_h,  F_h[t, :],  kind='linear', bounds_error=False, fill_value=np.nan)
-  interp_h2 = interp1d(nodes_h2, F_h2[t, :], kind='linear', bounds_error=False, fill_value=np.nan)
+  plt.figure(figsize=(8,4))
+  plt.plot(time_h, s_h,  label="s (FEM, grid h)", linestyle="--")
+  plt.plot(time_h2, s_h2, label="s (FEM, grid 2h)", linestyle="--")
+  plt.plot(time_h, s_analytic_h, label="s (analytical)")
+  plt.xlabel("Time [s]")
+  plt.ylabel("Interface s(t)")
+  plt.legend()
+  plt.title("Interface evolution")
+  plt.text(time_h[-1], 0.8,
+            f"MSE h = {mse_h:.3e}\nMSE 2h = {mse_h2:.3e}\nOrder ≈ {order_of_convergence_s:.3f}",
+            fontsize=10, va="top", ha="right", color="red")
+  plt.tight_layout()
+  plt.show()
 
-  # evaluate at the xi coordinates
-  vals_h  = interp_h(xi_h)
-  vals_h2 = interp_h2(xi_h2)
+  # --------------------------------------------------------
+  # Physical domain solution comparison
+  # --------------------------------------------------------
+  space = np.linspace(0, L, 500)
+  T, X = np.meshgrid(time_h, space, indexing="ij")
+  S = analytical_s(alpha_L, lambd, T, s0=0.0)
+  M = analytical_m(m_L, alpha_L, lambd, X, T)
+  M[X > S] = np.nan
 
-  # assign only where xi <= 1 (physical domain of that FEM)
-  mask1 = (xi_h  <= 1.0)
-  mask2 = (xi_h2 <= 1.0)
+  m_xt_h  = np.full_like(M, np.nan)
+  m_xt_h2 = np.full_like(M, np.nan)
 
-  m_xt_h[t,  mask1] = vals_h[mask1]
-  m_xt_h2[t, mask2] = vals_h2[mask2]
+  for t_idx, t in enumerate(time_h):
+    xi_h  = space / s_h[t_idx]
+    xi_h2 = space / interp_s_h2(t)
 
-Mh_flat = Mh.flatten()
-Mh2_flat = Mh2.flatten()
-m_xt_h_flat = m_xt_h.flatten()
-m_xt_h2_flat = m_xt_h2.flatten()
+    interp_h  = interp1d(nodes_h,  F_h[t_idx,:],  kind='linear', bounds_error=False, fill_value=np.nan)
+    interp_h2 = interp1d(nodes_h2, F_h2[min(t_idx, len(time_h2)-1),:], kind='linear', bounds_error=False, fill_value=np.nan)
 
-maskh = ~(np.isnan(Mh_flat) | np.isnan(m_xt_h_flat))
-maskh2 = ~(np.isnan(Mh2_flat) | np.isnan(m_xt_h2_flat))
+    vals_h  = interp_h(xi_h)
+    vals_h2 = interp_h2(xi_h2)
 
-mse_h  = mean_squared_error(Mh_flat[maskh], m_xt_h_flat[maskh])
-mse_h2 = mean_squared_error(Mh2_flat[maskh2], m_xt_h2_flat[maskh2])
+    mask1 = xi_h  <= 1.0
+    mask2 = xi_h2 <= 1.0
+    m_xt_h[t_idx, mask1]  = vals_h[mask1]
+    m_xt_h2[t_idx, mask2] = vals_h2[mask2]
 
-order_of_convergence_m = mse_h2 / mse_h
+  # Flatten + mask
+  Mh_flat   = M.flatten()
+  Mh_fem    = m_xt_h.flatten()
+  Mh2_fem   = m_xt_h2.flatten()
 
-# Plot FEM solution (h)
-plt.figure(figsize=(10,6))
-pcm = plt.pcolormesh(time, space, m_xt_h.T, shading='auto')
-plt.xlabel("Time [s]")
-plt.ylabel("x [m]")
-plt.title("F(x,t) - FEM solution (grid h)")
-plt.colorbar(pcm, label="F")
+  mask = ~(np.isnan(Mh_flat) | np.isnan(Mh_fem) | np.isnan(Mh2_fem))
 
-plt.text(time[-10], space[-50],
-         f"MSE for h = {mse_h:.3e}",
-         fontsize=10, va="bottom", ha="right", color="red")
+  mse_h  = mean_squared_error(Mh_flat[mask],  Mh_fem[mask])
+  mse_h2 = mean_squared_error(Mh_flat[mask], Mh2_fem[mask])
 
-plt.text(time[-10], space[-90],
-         f"MSE for 2*h = {mse_h2:.3e}",
-         fontsize=10, va="bottom", ha="right", color="red")
+  order_of_convergence_m = np.log(mse_h/mse_h2)/np.log(h/h2)
+  print(f'Order of convergence: {order_of_convergence_m:.4}')
 
-plt.text(time[-10], space[-130],
-         f"Order of convergence = {order_of_convergence_m:.3e}",
-         fontsize=10, va="bottom", ha="right", color="red")
-
-plt.tight_layout()
-plt.show()
+  plt.figure(figsize=(10,6))
+  pcm = plt.pcolormesh(time_h, space, m_xt_h.T, shading="auto")
+  plt.xlabel("Time [s]")
+  plt.ylabel("x [m]")
+  plt.title("F(x,t) FEM solution (grid h)")
+  plt.colorbar(pcm, label="F")
+  plt.text(time_h[-50], 0.9,
+            f"MSE h = {mse_h:.3e}\nMSE 2h = {mse_h2:.3e}\nOrder ≈ {order_of_convergence_m:.3f}",
+            fontsize=10, va="top", ha="right", color="red")
+  plt.tight_layout()
+  plt.show()
