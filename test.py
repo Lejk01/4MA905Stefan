@@ -1,3 +1,5 @@
 import numpy as np
-h_nodes = 0.5
-print(np.arange(1e-6, 600, h_nodes / 2))
+
+l = np.linspace(0, 1, 193)
+
+print((l[1] - l[0])**2 * 0.5)

@@ -20,7 +20,7 @@ def run_solver(N_nodes, L, HORIZON, alpha_L, k_L, rho_L, l, m_L, lambd, CFL_cons
   h = nodes[1] - nodes[0]
   
   # Stable time step scaling with h^2
-  dt = CFL_const * h**2 / alpha_L
+  dt = 1.3563368055555555e-05 # dt coming from our finest grid (193 nodes)
   time = np.arange(1e-6, HORIZON, dt)
   print(f"Running solver with N={N_nodes}, h={h:.3e}, dt={dt:.3e}, Nt={len(time)}")
   
@@ -93,9 +93,9 @@ if __name__ == "__main__":
   lambda_guess = 0.5
   lambd = fsolve(lambdeq, lambda_guess, args=(c_L, m_L, l))[0]
 
-  # Grids (76-79)
-  N_nodes_h  = 65
-  N_nodes_h2 = N_nodes_h // 2   # coarser grid (2h)
+  MAX_NODES = 193
+  N_nodes_h  = 145
+  N_nodes_h2 = N_nodes_h // 2 + 1   # coarser grid (2h)
   
   # Run solvers
   time_h,  s_h,  s_analytic_h,  nodes_h,  F_h  = run_solver(N_nodes_h,  L, HORIZON, alpha_L, k_L, rho_L, l, m_L, lambd)
@@ -143,29 +143,29 @@ if __name__ == "__main__":
   # --------------------------------------------------------
   # Physical domain solution comparison
   # --------------------------------------------------------
-  real_space = np.linspace(0, L, N_nodes_h*2) # Define the subset of the real axis that is our "ice-rod".
-  fine_space_h = np.sort(np.concatenate([space_h, np.tile(real_space, (len(time_h), 1))], axis=1), axis=1) # Include nodes from h discretization.
-  fine_space_h2 = np.sort(np.concatenate([space_h2, np.tile(real_space, (len(time_h2), 1))], axis=1), axis=1) # Include nodes from h2 discretization.
+  real_space    = np.linspace(0, L, MAX_NODES*2) # Define the subset of the real axis that is our "ice-rod".
+  fine_space_h  = np.unique(np.sort(np.concatenate([space_h, np.tile(real_space, (len(time_h), 1))], axis=1), axis=1), axis=1) # Include nodes from h discretization.
+  fine_space_h2 = np.unique(np.sort(np.concatenate([space_h2, np.tile(real_space, (len(time_h2), 1))], axis=1), axis=1), axis=1) # Include nodes from h2 discretization.
   
-  fine_h = np.mean(np.diff(fine_space_h))
+  fine_h  = np.mean(np.diff(fine_space_h))
   fine_h2 = np.mean(np.diff(fine_space_h2))
   
   print("Fine space h: ", fine_h)
   print("Fine space h2: ", fine_h2)
 
   print("Solving analytically")
-  Th = time_h[:, None]   # shape (Nt, 1) — analytical_m should broadcast
+  Th  = time_h[:, None]   # shape (Nt, 1) — analytical_m should broadcast
   Th2 = time_h2[:, None]   # shape (Nt, 1) — analytical_m should broadcast
-  Sh = analytical_s(alpha_L, lambd, time_h, s0=N_nodes_h)[:, None]  # (Nt, 1)
-  Sh2 = analytical_s(alpha_L, lambd, time_h2, s0=N_nodes_h)[:, None]
-  Mh = analytical_m(m_L, alpha_L, lambd, fine_space_h, Th)
+  sh  = s_h[:, None]
+  sh2 = s_h2[:, None]
+  Mh  = analytical_m(m_L, alpha_L, lambd, fine_space_h, Th)
   Mh2 = analytical_m(m_L, alpha_L, lambd, fine_space_h2, Th2)
 
-  Mh[fine_space_h > Sh]   = np.nan
-  Mh2[fine_space_h2 > Sh2] = np.nan
+  Mh[fine_space_h > sh]    = np.nan
+  Mh2[fine_space_h2 > sh2] = np.nan
   print("Interpolating")
   # Interpolate
-  m_xt_h  = np.full((len(time_h), fine_space_h.shape[1]), np.nan)
+  m_xt_h   = np.full((len(time_h), fine_space_h.shape[1]), np.nan)
   m_xt_h2  = np.full((len(time_h2), fine_space_h2.shape[1]), np.nan)
 
   for t_idx, t in enumerate(time_h):
@@ -177,27 +177,32 @@ if __name__ == "__main__":
 
     if t_idx < len(time_h2):
       xi_h2 = fine_space_h2[t_idx] / s_h2[t_idx]
-      interp_h2 = interp1d(nodes_h2, F_h2[min(t_idx, len(time_h2)-1),:], kind='linear', bounds_error=False, fill_value=np.nan)
+      interp_h2 = interp1d(nodes_h2, F_h2[t_idx, :], kind='linear', bounds_error=False, fill_value=np.nan)
       vals_h2 = interp_h2(xi_h2)
       mask2 = xi_h2 <= 1
       m_xt_h2[t_idx, mask2] = vals_h2[mask2]
   
-  nan_mask_h = ~np.isnan(m_xt_h)
+  nan_mask_h  = ~np.isnan(m_xt_h)
   nan_mask_h2 = ~np.isnan(m_xt_h2)
-  
+
+  nan_mask_Mh  = ~np.isnan(Mh)
+  nan_mask_Mh2 = ~np.isnan(Mh2)
+  print(np.sum(nan_mask_h))
+  print(np.sum(nan_mask_Mh))
+  print(np.sum(nan_mask_h2))
+  print(np.sum(nan_mask_Mh2))
   # Drop nan values to prepare for mse calc.
-  Mh_fem = m_xt_h[nan_mask_h]
+  Mh_fem  = m_xt_h[nan_mask_h]
   Mh2_fem = m_xt_h2[nan_mask_h2]
 
-  Mh_analytic = Mh[nan_mask_h]
+  Mh_analytic  = Mh[nan_mask_h]
   Mh2_analytic = Mh2[nan_mask_h2]
 
   print("Mh analytic: ", Mh.shape, "   Mh fem", m_xt_h.shape)
   print("Mh2 analytic: ", Mh2.shape, "   Mh2 fem", m_xt_h2.shape)
-  l2_h  = root_mean_squared_error(Mh_analytic,  Mh_fem) * np.sqrt(fine_h)
-  l2_h2 = root_mean_squared_error(Mh2_analytic, Mh2_fem) * np.sqrt(fine_h2)
+  l2_h  = root_mean_squared_error(Mh_analytic,  Mh_fem) * np.sqrt(h)
+  l2_h2 = root_mean_squared_error(Mh2_analytic, Mh2_fem) * np.sqrt(h2) 
 
-  print(root_mean_squared_error(Mh_analytic,  Mh_fem), root_mean_squared_error(Mh2_analytic, Mh2_fem))
   order_of_convergence_m = np.log(l2_h/l2_h2)/np.log(h/h2) 
   print(f'Order of convergence: {order_of_convergence_m:.4}')
 
