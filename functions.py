@@ -75,6 +75,31 @@ def construct_convection_matrix(N, h, nodes):
   
   return K
 
+def construct_convection2_matrix(N, h, nodes):
+  K = np.zeros((N, N))
+  for e in range(N-1):
+      xL, xR = e*h, (e+1)*h
+      # ∫ x*(xR-x) dx and ∫ x*(x-xL) dx (antiderivatives)
+      base1 = (xR*(xR**2)/2 - (xR**3)/3) - (xR*(xL**2)/2 - (xL**3)/3)   # ∫ x*(xR - x) dx
+      base2 = ((xR**3)/3 - xL*(xR**2)/2) - ((xL**3)/3 - xL*(xL**2)/2)   # ∫ x*(x - xL) dx
+
+      # Local matrix with a = trial(derivative) index, b = test index
+      I = np.zeros((2,2))
+      I[0,0] = (-1.0/(h*h))*base1   # a=1 (left),  b=1 (left)
+      I[0,1] = (-1.0/(h*h))*base2   # a=1,          b=2
+      I[1,0] = ( 1.0/(h*h))*base1   # a=2 (right),  b=1
+      I[1,1] = ( 1.0/(h*h))*base2   # a=2,          b=2
+
+      nodes = [e, e+1]
+      for aL, aG in enumerate(nodes):    # trial/derivative basis index -> column
+          if aG==0 or aG==N-1: continue
+          col = aG-1
+          for bL, bG in enumerate(nodes):  # test basis index -> row
+              if bG==0 or bG==N-1: continue
+              row = bG-1
+              K[row, col] += I[aL, bL]
+  return K
+
 def analytical_m(m_L, alpha_L, lambd, x, t):
   return m_L * (1 - erf(x / (2*np.sqrt(alpha_L*t))) / erf(lambd) )
 

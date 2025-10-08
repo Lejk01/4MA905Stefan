@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from functions import (construct_convection_matrix,
+from functions import (construct_convection2_matrix,
                       construct_mass_matrix,
                       construct_stiffness_matrix,
                       analytical_m, 
@@ -14,7 +14,7 @@ from sklearn.metrics import root_mean_squared_error
 # ============================================================
 # Solver function
 # ============================================================
-def run_solver(N_nodes, L, HORIZON, alpha_L, k_L, rho_L, l, m_L, lambd, CFL_const=0.25):
+def run_solver(N_nodes, L, HORIZON, alpha_L, k_L, rho_L, l, m_L, lambd, CFL_const=0.5):
   # Mesh
   nodes = np.linspace(0, 1, N_nodes)
   h = nodes[1] - nodes[0]
@@ -30,7 +30,7 @@ def run_solver(N_nodes, L, HORIZON, alpha_L, k_L, rho_L, l, m_L, lambd, CFL_cons
   # Matrices
   M = construct_mass_matrix(N_nodes, h)
   K = construct_stiffness_matrix(N_nodes, h)
-  C = construct_convection_matrix(N_nodes, h, nodes)
+  C = construct_convection2_matrix(N_nodes, h, nodes)
 
   # Interior
   interior_idx = np.arange(1, N_nodes-1)
@@ -60,7 +60,7 @@ def run_solver(N_nodes, L, HORIZON, alpha_L, k_L, rho_L, l, m_L, lambd, CFL_cons
 
     # dF/dxi at xi=1
     dFdxi = (3*F[n, -1] - 4*F[n, -2] + F[n, -3]) / (2*h)
-
+    #dFdxi = (F[n, -1] - F[n, -2]) / h
     # Stefan condition
     dsdt = -(k_L/(rho_L*l)) * (1/s_vals[n]) * dFdxi
     s_next = s_vals[n] + dt * dsdt
@@ -76,7 +76,6 @@ def run_solver(N_nodes, L, HORIZON, alpha_L, k_L, rho_L, l, m_L, lambd, CFL_cons
     F[n+1, 1:-1] += a_v
 
   return time, s_vals, s_analytic, nodes, F
-
 
 # ============================================================
 # Main script
@@ -95,7 +94,7 @@ if __name__ == "__main__":
   lambd = fsolve(lambdeq, lambda_guess, args=(c_L, m_L, l))[0]
 
   # Grids (76-79)
-  N_nodes_h  = 79
+  N_nodes_h  = 65
   N_nodes_h2 = N_nodes_h // 2   # coarser grid (2h)
   
   # Run solvers
@@ -127,7 +126,6 @@ if __name__ == "__main__":
   mse_h2 = np.sqrt(np.sum((s_analytic_h2 - s_h2)**2)) * np.sqrt(time_h2[1] - time_h2[0])
   order_of_convergence_s = np.log(mse_h/mse_h2)/np.log(h/h2)
 
-
   plt.figure(figsize=(8,4))
   plt.plot(time_h, s_h,  label="s (FEM, grid h)", linestyle="--")
   plt.plot(time_h2, s_h2, label="s (FEM, grid 2h)", linestyle="--")
@@ -149,17 +147,18 @@ if __name__ == "__main__":
   fine_space_h = np.sort(np.concatenate([space_h, np.tile(real_space, (len(time_h), 1))], axis=1), axis=1) # Include nodes from h discretization.
   fine_space_h2 = np.sort(np.concatenate([space_h2, np.tile(real_space, (len(time_h2), 1))], axis=1), axis=1) # Include nodes from h2 discretization.
   
-  print("Fine space h: ", fine_space_h.shape)
-  print("Fine space h2: ", fine_space_h2.shape)
+  fine_h = np.mean(np.diff(fine_space_h))
+  fine_h2 = np.mean(np.diff(fine_space_h2))
+  
+  print("Fine space h: ", fine_h)
+  print("Fine space h2: ", fine_h2)
 
   print("Solving analytically")
   Th = time_h[:, None]   # shape (Nt, 1) — analytical_m should broadcast
   Th2 = time_h2[:, None]   # shape (Nt, 1) — analytical_m should broadcast
   Sh = analytical_s(alpha_L, lambd, time_h, s0=N_nodes_h)[:, None]  # (Nt, 1)
-  Sh2 = analytical_s(alpha_L, lambd, time_h2, s0=N_nodes_h2)[:, None]
-  print("Solving Mh analytically...")
+  Sh2 = analytical_s(alpha_L, lambd, time_h2, s0=N_nodes_h)[:, None]
   Mh = analytical_m(m_L, alpha_L, lambd, fine_space_h, Th)
-  print("Solving Mh2 analytically...")
   Mh2 = analytical_m(m_L, alpha_L, lambd, fine_space_h2, Th2)
 
   Mh[fine_space_h > Sh]   = np.nan
@@ -195,10 +194,11 @@ if __name__ == "__main__":
 
   print("Mh analytic: ", Mh.shape, "   Mh fem", m_xt_h.shape)
   print("Mh2 analytic: ", Mh2.shape, "   Mh2 fem", m_xt_h2.shape)
-  mse_h  = root_mean_squared_error(Mh_analytic,  Mh_fem)
-  mse_h2 = root_mean_squared_error(Mh2_analytic, Mh2_fem)
+  l2_h  = root_mean_squared_error(Mh_analytic,  Mh_fem) * np.sqrt(fine_h)
+  l2_h2 = root_mean_squared_error(Mh2_analytic, Mh2_fem) * np.sqrt(fine_h2)
 
-  order_of_convergence_m = np.log(mse_h/mse_h2)/np.log(h/h2)
+  print(root_mean_squared_error(Mh_analytic,  Mh_fem), root_mean_squared_error(Mh2_analytic, Mh2_fem))
+  order_of_convergence_m = np.log(l2_h/l2_h2)/np.log(h/h2) 
   print(f'Order of convergence: {order_of_convergence_m:.4}')
 
   plt.figure(figsize=(10,6))
@@ -208,7 +208,7 @@ if __name__ == "__main__":
   plt.title("F(x,t) FEM solution (grid h)")
   plt.colorbar(pcm, label="F")
   plt.text(time_h[-50], 0.9,
-            f"MSE h = {mse_h:.3e}\nMSE 2h = {mse_h2:.3e}\nOrder ≈ {order_of_convergence_m:.3f}",
+            f"MSE h = {l2_h:.3e}\nMSE 2h = {l2_h2:.3e}\nOrder ≈ {order_of_convergence_m:.3f}",
             fontsize=10, va="top", ha="right", color="red")
   plt.tight_layout()
   plt.show()
