@@ -14,13 +14,17 @@ from sklearn.metrics import root_mean_squared_error
 # ============================================================
 # Solver function
 # ============================================================
-def run_solver(N_nodes, L, HORIZON, alpha_L, k_L, rho_L, l, m_L, lambd, CFL_const=0.5):
+def run_solver(max_nodes, N_nodes, L, HORIZON, alpha_L, k_L, rho_L, l, m_L, lambd, CFL_const=0.5):
   # Mesh
   nodes = np.linspace(0, 1, N_nodes)
+  nodes_max = np.linspace(0, 1, max_nodes)
   h = nodes[1] - nodes[0]
-  
+  h_max = nodes_max[1] - nodes_max[0]
+  print("alpha", alpha_L)
   # Stable time step scaling with h^2
-  dt = 1.3563368055555555e-05 # dt coming from our finest grid (193 nodes)
+  dt = CFL_const * (h_max**2) / alpha_L
+  print(dt)
+  #dt = 1.3563368055555555e-05 # dt coming from our finest grid (193 nodes)
   time = np.arange(1e-6, HORIZON, dt)
   print(f"Running solver with N={N_nodes}, h={h:.3e}, dt={dt:.3e}, Nt={len(time)}")
   
@@ -93,13 +97,13 @@ if __name__ == "__main__":
   lambda_guess = 0.5
   lambd = fsolve(lambdeq, lambda_guess, args=(c_L, m_L, l))[0]
 
-  MAX_NODES = 193
-  N_nodes_h  = 145
+  MAX_NODES = 200
+  N_nodes_h  = 200
   N_nodes_h2 = N_nodes_h // 2 + 1   # coarser grid (2h)
   
   # Run solvers
-  time_h,  s_h,  s_analytic_h,  nodes_h,  F_h  = run_solver(N_nodes_h,  L, HORIZON, alpha_L, k_L, rho_L, l, m_L, lambd)
-  time_h2, s_h2, s_analytic_h2, nodes_h2, F_h2 = run_solver(N_nodes_h2, L, HORIZON, alpha_L, k_L, rho_L, l, m_L, lambd)
+  time_h,  s_h,  s_analytic_h,  nodes_h,  F_h  = run_solver(MAX_NODES, N_nodes_h,  L, HORIZON, alpha_L, k_L, rho_L, l, m_L, lambd)
+  time_h2, s_h2, s_analytic_h2, nodes_h2, F_h2 = run_solver(MAX_NODES, N_nodes_h2, L, HORIZON, alpha_L, k_L, rho_L, l, m_L, lambd)
 
   space_h = np.tile(nodes_h, (len(time_h), 1)) * s_h[:, None] # Transform to space x = xi * s(t)
   space_h2 = np.tile(nodes_h2, (len(time_h2), 1)) * s_h2[:, None]
@@ -187,10 +191,7 @@ if __name__ == "__main__":
 
   nan_mask_Mh  = ~np.isnan(Mh)
   nan_mask_Mh2 = ~np.isnan(Mh2)
-  print(np.sum(nan_mask_h))
-  print(np.sum(nan_mask_Mh))
-  print(np.sum(nan_mask_h2))
-  print(np.sum(nan_mask_Mh2))
+
   # Drop nan values to prepare for mse calc.
   Mh_fem  = m_xt_h[nan_mask_h]
   Mh2_fem = m_xt_h2[nan_mask_h2]
