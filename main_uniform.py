@@ -59,8 +59,8 @@ def run_solver(N_nodes, L, HORIZON, alpha_L, k_L, rho_L, l, m_L, lambd, CFL_cons
     F_n[1:-1] += a_v
 
     # dF/dxi at xi=1
-    dFdxi = (F[n, -1] - F[n, -2]) / h
-  
+    dFdxi = (3*F[n, -1] - 4*F[n, -2] + F[n, -3]) / (2*h)
+
     # Stefan condition
     dsdt = -(k_L/(rho_L*l)) * (1/s_vals[n]) * dFdxi
     s_next = s_vals[n] + dt * dsdt
