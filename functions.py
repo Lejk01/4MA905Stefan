@@ -142,3 +142,8 @@ def finite_diff_xi(heat_distribution, n, h):
 
   return dmdxi
   
+def s_l2_err(s_a, s_h, n, dt):
+  err_sum = 0.0
+  for i in range(n):
+    err_sum += (s_a[i] - s_h[i])**2 * dt[i]
+  return np.sqrt(err_sum / n)

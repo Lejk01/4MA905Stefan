@@ -123,11 +123,8 @@ if __name__ == "__main__":
   # Compare s(t)
   # --------------------------------------------------------
   # Interpolate coarse solution to fine time grid for fair comparison
-  interp_s_h2 = interp1d(time_h2, s_h2, bounds_error=False, fill_value="extrapolate")
-  s_h2_interp = interp_s_h2(time_h)
-
-  mse_h  = np.sqrt(np.sum((s_analytic_h - s_h)**2)) *  np.sqrt(time_h[1] - time_h[0])
-  mse_h2 = np.sqrt(np.sum((s_analytic_h2 - s_h2)**2)) * np.sqrt(time_h2[1] - time_h2[0])
+  mse_h = root_mean_squared_error(s_analytic_h, s_h) * np.sqrt(time_h[1] - time_h[0])
+  mse_h2 = root_mean_squared_error(s_analytic_h, s_h2) * np.sqrt(time_h[1] - time_h[0])
   order_of_convergence_s = np.log(mse_h/mse_h2)/np.log(h/h2)
 
   plt.figure(figsize=(8,4))
