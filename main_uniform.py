@@ -9,7 +9,7 @@ from functions import (construct_convection2_matrix,
                       )
 from scipy.optimize import fsolve
 from scipy.interpolate import interp1d
-from sklearn.metrics import root_mean_squared_error
+from sklearn.metrics import mean_squared_error
 
 # ============================================================
 # Solver function
@@ -97,9 +97,15 @@ if __name__ == "__main__":
   lambda_guess = 0.5
   lambd = fsolve(lambdeq, lambda_guess, args=(c_L, m_L, l))[0]
 
+<<<<<<< HEAD
   MAX_NODES = 200
   N_nodes_h  = 200
   N_nodes_h2 = N_nodes_h // 2 + 1   # coarser grid (2h)
+=======
+  MAX_NODES = 150
+  N_nodes_h  = 140
+  N_nodes_h2 = 110
+>>>>>>> 6dafcef37a460eecb97d4e1e410082b232e51bfe
   
   # Run solvers
   time_h,  s_h,  s_analytic_h,  nodes_h,  F_h  = run_solver(MAX_NODES, N_nodes_h,  L, HORIZON, alpha_L, k_L, rho_L, l, m_L, lambd)
@@ -119,6 +125,9 @@ if __name__ == "__main__":
   h = nodes_h[1] - nodes_h[0]
   h2 = nodes_h2[1] - nodes_h2[0]
 
+  print(f'Nodes: {N_nodes_h2}, delta x: {h2:.2e}')
+  print(f'Nodes: {N_nodes_h}, delta x: {h:.2e}')
+
   # --------------------------------------------------------
   # Compare s(t)
   # --------------------------------------------------------
@@ -136,7 +145,7 @@ if __name__ == "__main__":
   plt.legend()
   plt.title("Interface evolution")
   plt.text(time_h[-1], 0.8,
-            f"MSE h = {mse_h:.3e}\nMSE 2h = {mse_h2:.3e}\nOrder ≈ {order_of_convergence_s:.5f}",
+            f"MSE {N_nodes_h2} nodes: = {mse_h2:.3e}\nMSE {N_nodes_h} nodes: = {mse_h:.3e}\nOrder of convergence ≈ {order_of_convergence_s:.5f}",
             fontsize=10, va="top", ha="right", color="red")
   plt.tight_layout()
   plt.show()
@@ -151,9 +160,6 @@ if __name__ == "__main__":
   fine_h  = np.mean(np.diff(fine_space_h))
   fine_h2 = np.mean(np.diff(fine_space_h2))
   
-  print("Fine space h: ", fine_h)
-  print("Fine space h2: ", fine_h2)
-
   print("Solving analytically")
   Th  = time_h[:, None]   # shape (Nt, 1) — analytical_m should broadcast
   Th2 = time_h2[:, None]   # shape (Nt, 1) — analytical_m should broadcast
@@ -196,10 +202,8 @@ if __name__ == "__main__":
   Mh_analytic  = Mh[nan_mask_h]
   Mh2_analytic = Mh2[nan_mask_h2]
 
-  print("Mh analytic: ", Mh.shape, "   Mh fem", m_xt_h.shape)
-  print("Mh2 analytic: ", Mh2.shape, "   Mh2 fem", m_xt_h2.shape)
-  l2_h  = root_mean_squared_error(Mh_analytic,  Mh_fem) * np.sqrt(h)
-  l2_h2 = root_mean_squared_error(Mh2_analytic, Mh2_fem) * np.sqrt(h2) 
+  l2_h  = np.sqrt(mean_squared_error(Mh_analytic,  Mh_fem)) * np.sqrt(h)
+  l2_h2 = np.sqrt(mean_squared_error(Mh2_analytic, Mh2_fem)) * np.sqrt(h2) 
 
   order_of_convergence_m = np.log(l2_h/l2_h2)/np.log(h/h2) 
   print(f'Order of convergence: {order_of_convergence_m:.4}')
@@ -211,7 +215,7 @@ if __name__ == "__main__":
   plt.title("F(x,t) FEM solution (grid h)")
   plt.colorbar(pcm, label="F")
   plt.text(time_h[-50], 0.9,
-            f"MSE h = {l2_h:.3e}\nMSE 2h = {l2_h2:.3e}\nOrder ≈ {order_of_convergence_m:.3f}",
+            f"MSE {N_nodes_h2} nodes: = {l2_h2:.3e}\nMSE {N_nodes_h} nodes: = {l2_h:.3e}\nOrder of convergence ≈ {order_of_convergence_m:.3f}",
             fontsize=10, va="top", ha="right", color="red")
   plt.tight_layout()
   plt.show()
