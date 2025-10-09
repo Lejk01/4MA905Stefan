@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from functions import (construct_convection2_matrix,
+from functions import (construct_convection_matrix,
                       construct_mass_matrix,
                       construct_stiffness_matrix,
                       analytical_m, 
@@ -9,7 +9,7 @@ from functions import (construct_convection2_matrix,
                       )
 from scipy.optimize import fsolve
 from scipy.interpolate import interp1d
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import root_mean_squared_error, mean_squared_error
 
 # ============================================================
 # Solver function
@@ -34,7 +34,7 @@ def run_solver(max_nodes, N_nodes, L, HORIZON, alpha_L, k_L, rho_L, l, m_L, lamb
   # Matrices
   M = construct_mass_matrix(N_nodes, h)
   K = construct_stiffness_matrix(N_nodes, h)
-  C = construct_convection2_matrix(N_nodes, h, nodes)
+  C = construct_convection_matrix(N_nodes, h, nodes)
 
   # Interior
   interior_idx = np.arange(1, N_nodes-1)
@@ -97,15 +97,9 @@ if __name__ == "__main__":
   lambda_guess = 0.5
   lambd = fsolve(lambdeq, lambda_guess, args=(c_L, m_L, l))[0]
 
-<<<<<<< HEAD
   MAX_NODES = 200
   N_nodes_h  = 200
   N_nodes_h2 = N_nodes_h // 2 + 1   # coarser grid (2h)
-=======
-  MAX_NODES = 150
-  N_nodes_h  = 140
-  N_nodes_h2 = 110
->>>>>>> 6dafcef37a460eecb97d4e1e410082b232e51bfe
   
   # Run solvers
   time_h,  s_h,  s_analytic_h,  nodes_h,  F_h  = run_solver(MAX_NODES, N_nodes_h,  L, HORIZON, alpha_L, k_L, rho_L, l, m_L, lambd)
@@ -133,7 +127,7 @@ if __name__ == "__main__":
   # --------------------------------------------------------
   # Interpolate coarse solution to fine time grid for fair comparison
   mse_h = root_mean_squared_error(s_analytic_h, s_h) * np.sqrt(time_h[1] - time_h[0])
-  mse_h2 = root_mean_squared_error(s_analytic_h, s_h2) * np.sqrt(time_h[1] - time_h[0])
+  mse_h2 = root_mean_squared_error(s_analytic_h2, s_h2) * np.sqrt(time_h[1] - time_h[0])
   order_of_convergence_s = np.log(mse_h/mse_h2)/np.log(h/h2)
 
   plt.figure(figsize=(8,4))
@@ -202,8 +196,8 @@ if __name__ == "__main__":
   Mh_analytic  = Mh[nan_mask_h]
   Mh2_analytic = Mh2[nan_mask_h2]
 
-  l2_h  = np.sqrt(mean_squared_error(Mh_analytic,  Mh_fem)) * np.sqrt(h)
-  l2_h2 = np.sqrt(mean_squared_error(Mh2_analytic, Mh2_fem)) * np.sqrt(h2) 
+  l2_h  = root_mean_squared_error(Mh_analytic, Mh_fem) * np.sqrt(h)
+  l2_h2 = root_mean_squared_error(Mh2_analytic, Mh2_fem) * np.sqrt(h2) 
 
   order_of_convergence_m = np.log(l2_h/l2_h2)/np.log(h/h2) 
   print(f'Order of convergence: {order_of_convergence_m:.4}')

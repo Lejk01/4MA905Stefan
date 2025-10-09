@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from functions import (construct_convection2_matrix,
+from functions import (construct_convection_matrix,
                       construct_mass_matrix,
                       construct_stiffness_matrix,
                       analytical_m,
@@ -47,7 +47,7 @@ def run_solver(max_nodes, N_nodes, L, HORIZON, alpha_L, k_L, rho_L, l, m_L, lamb
   # FEM matrices (use same constructors as uniform code)
   M = construct_mass_matrix(N_nodes, h)
   K = construct_stiffness_matrix(N_nodes, h)
-  C = construct_convection2_matrix(N_nodes, h, nodes)
+  C = construct_convection_matrix(N_nodes, h, nodes)
 
   # Interior (Dirichlet nodes removed)
   interior_idx = np.arange(1, N_nodes - 1)
@@ -113,7 +113,7 @@ if __name__ == "__main__":
   lambd = fsolve(lambdeq, lambda_guess, args=(c_L, m_L, l))[0]
 
   MAX_NODES = 200
-  N_nodes_h  = 20
+  N_nodes_h  = 200
   N_nodes_h2 = N_nodes_h // 2 + 1   # coarser grid (2h)
 
   gamma = 2.0
