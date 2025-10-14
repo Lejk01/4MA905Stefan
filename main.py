@@ -3,43 +3,29 @@ import matplotlib.pyplot as plt
 from functions import (construct_convection_matrix,
                       construct_mass_matrix,
                       construct_stiffness_matrix,
-                      analytical_m,
+                      analytical_m, 
                       analytical_s,
-                      lambdeq,
-                      s_l2_err
+                      lambdeq
                       )
 from scipy.optimize import fsolve
 from scipy.interpolate import interp1d
 from sklearn.metrics import mean_squared_error
-import seaborn as sns
 
 # ============================================================
-# Solver function (graded time mesh) - same structure as uniform run_solver
+# Solver function
 # ============================================================
-def run_solver(max_nodes, N_nodes, L, HORIZON, alpha_L, k_L, rho_L, l, m_L, lambd, gamma=2.0, TIME_POINTS=5000, CFL_const=0.165):
+def run_solver(N_nodes, L, HORIZON, alpha_L, k_L, rho_L, l, m_L, lambd, gamma=2.0, M_points=5000):
   # Mesh
   nodes = np.linspace(0, 1, N_nodes)
-  nodes_max = np.linspace(0, 1, max_nodes)
   h = nodes[1] - nodes[0]
-  h_max = nodes_max[1] - nodes_max[0]
-  dt = CFL_const * (h_max**2) / alpha_L
+  
+  n = np.arange(0, M_points)
+  time = HORIZON*(n/M_points)**gamma
+  
+  time[0] = time[1]/2
 
-  tau = np.linspace(0.0, 1.0, TIME_POINTS)
-  eps = 1e-9
-  time = HORIZON * (tau**gamma)
-  time[0] = eps
-  dt_arr1 = np.diff(time)
-  dt_subset = np.where(dt_arr1 <= [dt]*len(dt_arr1))
-  time_subset = time[:len(dt_subset)]
-
-  if time_subset[-1] < HORIZON:
-    extended_time = np.arange(time_subset[-1], HORIZON, dt)
-    time = np.sort(np.concatenate([time_subset, extended_time]))
-  dt_arr = np.diff(time)
-  print("len time: ", len(time), " time", time)
-  print("cfl dt: ", dt, " last dt: ", dt_arr[-1])
-
-  print(f"Running solver (graded) with N={N_nodes}, h={h:.3e}, gamma={gamma:.2f}, Nt={len(time)}")
+  dt_arr = time[1:] - time[:-1]
+  
 
   # Analytical s on the graded time points
   s_analytic = analytical_s(alpha_L, lambd, time, h)
@@ -70,15 +56,15 @@ def run_solver(max_nodes, N_nodes, L, HORIZON, alpha_L, k_L, rho_L, l, m_L, lamb
   s_vals[0] = s_analytic[0]
 
   # Time stepping (graded dt).
-  for n in range(len(time) - 1):
+  for n in range(len(dt_arr)):
     dt = dt_arr[n]
-
+    
     # Current F (u + v)
-    F_n = u_vals.copy()
-    F_n[1:-1] += a_v
+    F_n = F[n, :].copy()
+    
 
     # dF/dxi at xi = 1 using the same 3-point backward finite difference.
-    dFdxi = (3.0 * F[n, -1] - 4.0 * F[n, -2] + F[n, -3]) / (2.0 * h)
+    dFdxi = (3.0 * F_n[-1] - 4.0 * F_n[-2] + F_n[-3]) / (2.0 * h)
 
     # Stefan ODE.
     dsdt = -(k_L / (rho_L * l)) * (1.0 / s_vals[n]) * dFdxi
@@ -97,7 +83,7 @@ def run_solver(max_nodes, N_nodes, L, HORIZON, alpha_L, k_L, rho_L, l, m_L, lamb
   return time, s_vals, s_analytic, nodes, F
 
 # ============================================================
-# Main script - uses run_solver twice (h and 2h) and performs full comparison
+# Main script
 # ============================================================
 if __name__ == "__main__":
   k_L = 1.0
@@ -112,16 +98,15 @@ if __name__ == "__main__":
   lambda_guess = 0.5
   lambd = fsolve(lambdeq, lambda_guess, args=(c_L, m_L, l))[0]
 
-  MAX_NODES = 200
-  N_nodes_h  = 40
-  N_nodes_h2 = 20
+  N_nodes_h  = 320
+  N_nodes_h2 = 160
 
-  gamma = 2.0
-  time_h,  s_h,  s_analytic_h,  nodes_h,  F_h  = run_solver(MAX_NODES, N_nodes_h,  L, HORIZON, alpha_L, k_L, rho_L, l, m_L, lambd, gamma=gamma)
-  time_h2, s_h2, s_analytic_h2, nodes_h2, F_h2 = run_solver(MAX_NODES, N_nodes_h2, L, HORIZON, alpha_L, k_L, rho_L, l, m_L, lambd, gamma=gamma)
+  gamma = 1
+  time_points = 100000
+  time_h,  s_h,  s_analytic_h,  nodes_h,  F_h  = run_solver(N_nodes_h,  L, HORIZON, alpha_L, k_L, rho_L, l, m_L, lambd, gamma=gamma, M_points=time_points)
+  time_h2, s_h2, s_analytic_h2, nodes_h2, F_h2 = run_solver(N_nodes_h2, L, HORIZON, alpha_L, k_L, rho_L, l, m_L, lambd, gamma=gamma, M_points=time_points)
 
-  # Map xi-domain -> physical x domain.
-  space_h  = np.tile(nodes_h,  (len(time_h), 1)) * s_h[:, None]
+  space_h = np.tile(nodes_h, (len(time_h), 1)) * s_h[:, None] # Transform to space x = xi * s(t)
   space_h2 = np.tile(nodes_h2, (len(time_h2), 1)) * s_h2[:, None]
 
   h = nodes_h[1] - nodes_h[0]
@@ -131,61 +116,48 @@ if __name__ == "__main__":
   # Compare s(t)
   # --------------------------------------------------------
   # Interpolate coarse solution to fine time grid for fair comparison
-  dt_h = np.diff(time_h)
-  dt_h2 = np.diff(time_h2)
-  dt_h = np.concatenate([dt_h, [dt_h[-1]]])
-  dt_h2 = np.concatenate([dt_h2, [dt_h2[-1]]])
 
-  mse_h = s_l2_err(s_analytic_h, s_h, len(time_h), dt_h)
-  mse_h2 = s_l2_err(s_analytic_h2, s_h2, len(time_h2), dt_h2)
+  mse_h = np.sqrt(np.sum(np.abs(s_analytic_h - s_h)**2 * np.max(np.diff(time_h))))
+  mse_h2 = np.sqrt(np.sum(np.abs(s_analytic_h2 - s_h2)**2 * np.max(np.diff(time_h2))))
 
-  print("mse_h=", mse_h, " mse_h2=", mse_h2, " h=", h, " h2=", h2)
   order_of_convergence_s = np.log(mse_h/mse_h2)/np.log(h/h2)
 
   plt.figure(figsize=(8,4))
-  plt.plot(time_h, s_h,  label="s (FEM, grid h)", linestyle="--")
-  plt.plot(time_h2, s_h2, label="s (FEM, grid 2h)", linestyle="--")
+  plt.plot(time_h, s_h,  label=f"s (FEM, grid {N_nodes_h} nodes)", linestyle="--")
+  plt.plot(time_h2, s_h2, label=f"s (FEM, grid {N_nodes_h2} nodes)", linestyle="--")
   plt.plot(time_h, s_analytic_h, label="s (analytical)")
   plt.xlabel("Time [s]")
   plt.ylabel("Interface s(t)")
   plt.legend()
-  plt.title("Interface evolution (graded time mesh)")
+  plt.title("Interface evolution")
   plt.text(time_h[-1], 0.8,
-            f"MSE {N_nodes_h2} nodes = {mse_h2:.3e}\nMSE {N_nodes_h} nodes = {mse_h:.3e}\nOrder ≈ {order_of_convergence_s:.5f}",
+            f"MSE {N_nodes_h2} nodes = {mse_h2:.3e}\nMSE {N_nodes_h} nodes = {mse_h:.3e}\nOrder of convergence ≈ {order_of_convergence_s:.5f}",
             fontsize=10, va="top", ha="right", color="red")
   plt.tight_layout()
   plt.show()
 
   # --------------------------------------------------------
-  # Physical domain solution comparison (map xi->x and compute L2/MSE)
+  # Physical domain solution comparison
   # --------------------------------------------------------
-  real_space    = np.linspace(0, L, MAX_NODES*2) # Define the subset of the real axis that is our "ice-rod".
-  # Include nodes from h discretization and also the regular real_space; create a consistent fine-space per time-step
-  fine_space_h  = np.unique(np.sort(np.concatenate([space_h,  np.tile(real_space, (len(time_h), 1))], axis=1), axis=1), axis=1)
-  fine_space_h2 = np.unique(np.sort(np.concatenate([space_h2, np.tile(real_space, (len(time_h2), 1))], axis=1), axis=1), axis=1)
-
+  real_space    = np.linspace(0, L, 400) # Define the subset of the real axis that is our "ice-rod".
+  fine_space_h  = np.unique(np.sort(np.concatenate([space_h, np.tile(real_space, (len(time_h), 1))], axis=1), axis=1), axis=1) # Include nodes from h discretization.
+  fine_space_h2 = np.unique(np.sort(np.concatenate([space_h2, np.tile(real_space, (len(time_h2), 1))], axis=1), axis=1), axis=1) # Include nodes from h2 discretization.
+  
   fine_h  = np.mean(np.diff(fine_space_h))
   fine_h2 = np.mean(np.diff(fine_space_h2))
-
-  print("Fine space h: ", fine_h)
-  print("Fine space h2: ", fine_h2)
-
+  
   print("Solving analytically")
-  Th  = time_h[:, None]   # shape (Nt, 1)
-  Th2 = time_h2[:, None]
+  Th  = time_h[:, None]   # shape (Nt, 1) — analytical_m should broadcast
+  Th2 = time_h2[:, None]   # shape (Nt, 1) — analytical_m should broadcast
   sh  = s_h[:, None]
   sh2 = s_h2[:, None]
-
-  # Analytical field evaluated on fine-space arrays: ensure analytical_m supports vectorized inputs
   Mh  = analytical_m(m_L, alpha_L, lambd, fine_space_h, Th)
   Mh2 = analytical_m(m_L, alpha_L, lambd, fine_space_h2, Th2)
 
-  # Mask outside moving interface
   Mh[fine_space_h > sh]    = np.nan
   Mh2[fine_space_h2 > sh2] = np.nan
-
-  print("Interpolating FEM -> physical x grid")
-  # Interpolate FEM solutions (xi -> x) onto fine_space arrays and build m_xt arrays
+  print("Interpolating")
+  # Interpolate
   m_xt_h   = np.full((len(time_h), fine_space_h.shape[1]), np.nan)
   m_xt_h2  = np.full((len(time_h2), fine_space_h2.shape[1]), np.nan)
 
@@ -202,7 +174,7 @@ if __name__ == "__main__":
       vals_h2 = interp_h2(xi_h2)
       mask2 = xi_h2 <= 1
       m_xt_h2[t_idx, mask2] = vals_h2[mask2]
-
+  
   nan_mask_h  = ~np.isnan(m_xt_h)
   nan_mask_h2 = ~np.isnan(m_xt_h2)
 
@@ -216,23 +188,31 @@ if __name__ == "__main__":
   Mh_analytic  = Mh[nan_mask_h]
   Mh2_analytic = Mh2[nan_mask_h2]
 
-  print("Mh analytic: ", Mh.shape, "   Mh fem", m_xt_h.shape)
-  print("Mh2 analytic: ", Mh2.shape, "   Mh2 fem", m_xt_h2.shape)
-  l2_h  = np.sqrt(mean_squared_error(Mh_analytic,  Mh_fem)) * np.sqrt(h)
-  l2_h2 = np.sqrt(mean_squared_error(Mh2_analytic, Mh2_fem)) * np.sqrt(h2)
+  l2_h = np.sqrt(np.sum(np.abs(Mh_analytic[-1] - Mh_fem[-1])**2 * np.max(np.diff(fine_space_h))))
+  l2_h2 = np.sqrt(np.sum(np.abs(Mh2_analytic[-1] - Mh2_fem[-1])**2 * np.max(np.diff(fine_space_h2)))) 
 
-  order_of_convergence_m = np.log(l2_h/l2_h2)/np.log(h/h2)
-  print(f'Order of convergence (m): {order_of_convergence_m:.4}')
-'''
+  order_of_convergence_m = np.log(l2_h/l2_h2)/np.log(h/h2) 
+  print(f'Order of convergence: {order_of_convergence_m:.4}')
+
+  # For the plot
+  x_uniform = np.linspace(0, np.max(s_analytic_h), 300)
+  m_phys_xt = np.zeros((len(time_h), len(x_uniform)))
+
+  for i, (s_i, t_i) in enumerate(zip(s_h, time_h)):
+      x_phys = nodes_h * s_i
+      interp_func = interp1d(x_phys, F_h[i, :], bounds_error=False, fill_value=np.nan)
+      m_phys_xt[i, :] = interp_func(x_uniform)
+
   plt.figure(figsize=(10,6))
-  pcm = plt.pcolormesh(time_h, np.linspace(0, L, m_xt_h.shape[1]), m_xt_h.T, shading="auto")
+  pcm = plt.pcolormesh(time_h, x_uniform, m_phys_xt.T, shading="auto")
   plt.xlabel("Time [s]")
   plt.ylabel("x [m]")
-  plt.title("F(x,t) FEM solution (grid h) - graded time mesh")
+  plt.title("F(x,t) FEM solution (grid h)")
   plt.colorbar(pcm, label="F")
+  plt.plot(time_h, s_analytic_h, color="red", linewidth=2, label="s(t) analytic")
   plt.text(time_h[-50], 0.9,
-            f"MSE {N_nodes_h2} nodes = {l2_h2:.3e}\nMSE {N_nodes_h} nodes = {l2_h:.3e}\nOrder ≈ {order_of_convergence_m:.3f}",
+            f"MSE {N_nodes_h2} nodes = {l2_h2:.3e}\nMSE {N_nodes_h} nodes = {l2_h:.3e}\nOrder of convergence ≈ {order_of_convergence_m:.3f}",
             fontsize=10, va="top", ha="right", color="red")
+  plt.ylim(0,2)
   plt.tight_layout()
   plt.show()
-'''

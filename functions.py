@@ -65,7 +65,7 @@ def construct_stiffness_matrix(N, h):
 def construct_convection_matrix(N, h, nodes):
   K = np.zeros((N, N))
 
-  for i in range(N-1):
+  for i in range(N-2):
     K[i,i] = -h/3
     if i > 0:
       K[i, i-1] = -(2*nodes[i+1]**3 - 2*nodes[i]**3 - 3*nodes[i+1]**2*nodes[i] + 3*nodes[i]**3) / (6*h**2)
