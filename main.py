@@ -102,7 +102,7 @@ if __name__ == "__main__":
   N_nodes_h2 = 160
 
   gamma = 1
-  time_points = 100000
+  time_points = 100_000
   time_h,  s_h,  s_analytic_h,  nodes_h,  F_h  = run_solver(N_nodes_h,  L, HORIZON, alpha_L, k_L, rho_L, l, m_L, lambd, gamma=gamma, M_points=time_points)
   time_h2, s_h2, s_analytic_h2, nodes_h2, F_h2 = run_solver(N_nodes_h2, L, HORIZON, alpha_L, k_L, rho_L, l, m_L, lambd, gamma=gamma, M_points=time_points)
 
@@ -199,19 +199,19 @@ if __name__ == "__main__":
   m_phys_xt = np.zeros((len(time_h), len(x_uniform)))
 
   for i, (s_i, t_i) in enumerate(zip(s_h, time_h)):
-      x_phys = nodes_h * s_i
-      interp_func = interp1d(x_phys, F_h[i, :], bounds_error=False, fill_value=np.nan)
-      m_phys_xt[i, :] = interp_func(x_uniform)
+    x_phys = nodes_h * s_i
+    interp_func = interp1d(x_phys, F_h[i, :], bounds_error=False, fill_value=np.nan)
+    m_phys_xt[i, :] = interp_func(x_uniform)
 
   plt.figure(figsize=(10,6))
   pcm = plt.pcolormesh(time_h, x_uniform, m_phys_xt.T, shading="auto")
   plt.xlabel("Time [s]")
   plt.ylabel("x [m]")
   plt.title("F(x,t) FEM solution (grid h)")
-  plt.colorbar(pcm, label="F")
+  plt.colorbar(pcm, label="Temperature")
   plt.plot(time_h, s_analytic_h, color="red", linewidth=2, label="s(t) analytic")
-  plt.text(time_h[-50], 0.9,
-            f"MSE {N_nodes_h2} nodes = {l2_h2:.3e}\nMSE {N_nodes_h} nodes = {l2_h:.3e}\nOrder of convergence ≈ {order_of_convergence_m:.3f}",
+  plt.text(time_h[-50], 1.75,
+            f"L2 error {N_nodes_h2} nodes = {l2_h2:.3e}\n L2 error {N_nodes_h} nodes = {l2_h:.3e}\nOrder of convergence ≈ {order_of_convergence_m:.3f}",
             fontsize=10, va="top", ha="right", color="red")
   plt.ylim(0,2)
   plt.tight_layout()
